@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Portfolio Analytics — Dashboard</title>
+<script src="plotly.min.js"></script>
+<script src="data_inline.js"></script>
+<!-- data loaded inline to avoid file:// fetch/CORS restrictions -->
+<style>
+  :root{
+    --bg: #0B1220;
+    --panel: #121A2B;
+    --panel-2: #16203570;
+    --border: #22304A;
+    --teal: #2DD4BF;
+    --amber: #F5A623;
+    --text: #E8ECF4;
+    --muted: #8792A8;
+    --pos: #34D399;
+    --neg: #F87171;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: radial-gradient(1200px 600px at 15% -10%, #132038 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 22px 36px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #0D1526 0%, #0B1220 100%);
+    position: sticky; top:0; z-index: 10;
+  }
+  .brand{ display:flex; align-items:baseline; gap: 12px; }
+  .brand .mark{
+    width: 10px; height: 10px; border-radius: 2px;
+    background: var(--teal); transform: rotate(45deg);
+    box-shadow: 0 0 14px rgba(45,212,191,0.65);
+  }
+  .brand h1{
+    font-family: Georgia, 'Times New Roman', serif; font-weight: 600; font-size: 22px; margin:0;
+    letter-spacing: 0.2px;
+  }
+  .brand .sub{ color: var(--muted); font-size: 12.5px; margin-left: 4px; }
+  nav.tabs{ display:flex; gap: 6px; background: var(--panel); padding: 4px; border-radius: 10px; border: 1px solid var(--border); }
+  nav.tabs button{
+    font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-weight:600; font-size: 13px; color: var(--muted);
+    background: transparent; border: none; padding: 9px 18px; border-radius: 7px; cursor: pointer;
+    transition: all .15s ease;
+  }
+  nav.tabs button.active{ background: var(--teal); color: #06231F; }
+  nav.tabs button:not(.active):hover{ color: var(--text); }
+
+  main{ max-width: 1280px; margin: 0 auto; padding: 28px 36px 60px; }
+  .view{ display:none; animation: fade .25s ease; }
+  .view.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform: translateY(4px);} to{opacity:1; transform:none;} }
+
+  .toolbar{ display:flex; align-items:center; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
+  .toolbar label{ font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px;}
+  select{
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 12px; border-radius: 8px; font-family: 'Courier New', Consolas, monospace; font-size: 13px;
+  }
+  .chip-group{ display:flex; gap:6px; }
+  .chip{
+    padding: 7px 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel);
+    color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .15s;
+  }
+  .chip.active{ border-color: var(--teal); color: var(--teal); background: #103A35; }
+
+  .grid{ display:grid; gap: 18px; }
+  .grid > *{ min-width: 0; }
+  .grid.kpis{ grid-template-columns: repeat(5, 1fr); margin-bottom: 20px; }
+  .grid.two{ grid-template-columns: 1.4fr 1fr; }
+  .grid.risk-cards{ grid-template-columns: repeat(5, 1fr); margin-top: 18px; }
+  [id$="-chart"]{ width: 100%; }
+
+  .card{
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .card h3{ margin: 0 0 4px; font-family: Georgia, 'Times New Roman', serif; font-weight:600; font-size: 15px; color: var(--text); }
+  .card .caption{ color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+
+  .kpi .label{ color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .kpi .value{ font-family:'Courier New', Consolas, monospace; font-size: 26px; font-weight: 600; margin-top: 6px; }
+  .kpi .delta{ font-family:'Courier New', Consolas, monospace; font-size: 12.5px; margin-top: 4px; }
+  .up{ color: var(--pos); } .down{ color: var(--neg); }
+
+  .gauge-wrap{ display:flex; align-items:center; gap: 20px; }
+  .gauge-legend{ font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+  .gauge-legend b{ color: var(--text); font-family:'Courier New', Consolas, monospace; }
+
+  .weight-row{ display:flex; align-items:center; gap: 10px; margin: 9px 0; }
+  .weight-row .name{ width: 52px; font-family:'Courier New', Consolas, monospace; font-size: 12.5px; color: var(--muted); }
+  .weight-row .bar-track{ flex:1; height: 9px; background:#0D1526; border-radius: 5px; overflow:hidden; border:1px solid var(--border);}
+  .weight-row .bar-fill{ height:100%; background: linear-gradient(90deg, var(--teal), #7DE8DB); border-radius: 5px; }
+  .weight-row .pct{ width: 46px; text-align:right; font-family:'Courier New', Consolas, monospace; font-size: 12.5px; }
+
+  footer{ text-align:center; color: var(--muted); font-size: 11.5px; padding: 30px 0 10px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="mark"></span>
+    <h1>Meridian<span style="color:var(--teal)">/</span>Five</h1>
+    <span class="sub">Portfolio Analytics Prototype</span>
+  </div>
+  <nav class="tabs">
+    <button class="active" data-view="performance">Performance</button>
+    <button data-view="risk">Risk</button>
+    <button data-view="optimization">Optimization &amp; Forecast</button>
+  </nav>
+</div>
+
+<main>
+
+  <!-- PERFORMANCE VIEW -->
+  <section id="performance" class="view active">
+    <div class="grid kpis" id="kpi-row"></div>
+    <div class="grid two">
+      <div class="card">
+        <h3>Indexed Price Performance</h3>
+        <div class="caption">Weekly close, rebased to 100 at the start of the sample window. Click a legend item to isolate a holding.</div>
+        <div id="perf-chart" style="height:400px;"></div>
+      </div>
+      <div class="card">
+        <h3>Return Correlation</h3>
+        <div class="caption">Daily return co-movement across the five holdings.</div>
+        <div id="corr-chart" style="height:400px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RISK VIEW -->
+  <section id="risk" class="view">
+    <div class="toolbar">
+      <label>Confidence</label>
+      <div class="chip-group" id="var-toggle">
+        <div class="chip active" data-var="var95">95%</div>
+        <div class="chip" data-var="var99">99%</div>
+      </div>
+    </div>
+    <div class="grid two">
+      <div class="card">
+        <h3>Value at Risk by Holding</h3>
+        <div class="caption">One-day historical VaR — the loss not expected to be exceeded at the selected confidence level.</div>
+        <div id="var-chart" style="height:360px;"></div>
+      </div>
+      <div class="card">
+        <h3>Risk / Return Map</h3>
+        <div class="caption">Bubble size reflects beta to the equal-weighted market benchmark.</div>
+        <div id="rr-chart" style="height:360px;"></div>
+      </div>
+    </div>
+    <div class="grid risk-cards" id="risk-cards"></div>
+  </section>
+
+  <!-- OPTIMIZATION VIEW -->
+  <section id="optimization" class="view">
+    <div class="toolbar">
+      <label>Strategy</label>
+      <div class="chip-group" id="strategy-toggle">
+        <div class="chip active" data-strat="Max_Sharpe">Max Sharpe</div>
+        <div class="chip" data-strat="Min_Variance">Min Variance</div>
+        <div class="chip" data-strat="Equal_Weight">Equal Weight</div>
+      </div>
+    </div>
+    <div class="grid two">
+      <div class="card">
+        <h3>Efficient Frontier</h3>
+        <div class="caption">Achievable risk/return combinations from the five holdings, with the selected strategy marked.</div>
+        <div id="frontier-chart" style="height:360px;"></div>
+      </div>
+      <div class="card">
+        <h3 id="strategy-title">Max Sharpe — Allocation</h3>
+        <div class="caption" id="strategy-caption">Weights that maximize risk-adjusted return.</div>
+        <div id="weights-list" style="margin-top:14px;"></div>
+        <div class="gauge-wrap" style="margin-top:18px;">
+          <div class="kpi"><div class="label">Ann. Return</div><div class="value" id="strat-return">—</div></div>
+          <div class="kpi"><div class="label">Ann. Volatility</div><div class="value" id="strat-vol">—</div></div>
+          <div class="kpi"><div class="label">Sharpe</div><div class="value" id="strat-sharpe">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:18px;">
+      <h3>12-Week Portfolio Value Forecast (Max-Sharpe Weights)</h3>
+      <div class="caption">Holt's damped-trend exponential smoothing on the notional portfolio value, with 95% prediction interval.</div>
+      <div id="forecast-chart" style="height:380px;"></div>
+    </div>
+  </section>
+
+</main>
+<footer>Prototype dashboard — data: public daily equity prices, Jan 2013–Dec 2017 · Built with Python + Plotly.js</footer>
+
+<script>
+(function(DATA){
+
+  const teal = '#2DD4BF', amber='#F5A623', pos='#34D399', neg='#F87171', muted='#8792A8', text='#E8ECF4';
+  const palette = ['#2DD4BF','#F5A623','#7C9CFF','#F87171','#C084FC'];
+  const layoutBase = {
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: muted, family: 'Inter', size: 11.5 },
+    margin: {t:10,l:44,r:16,b:36},
+    legend: {orientation:'h', y:-0.18, font:{color:text, size:11}},
+    xaxis: {gridcolor:'#1B2540', zerolinecolor:'#1B2540'},
+    yaxis: {gridcolor:'#1B2540', zerolinecolor:'#1B2540'},
+  };
+
+  // ---- Tabs ----
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      document.getElementById(btn.dataset.view).classList.add('active');
+      window.dispatchEvent(new Event('resize'));
+      setTimeout(()=>{
+        document.querySelectorAll(`#${btn.dataset.view} [id$="-chart"]`).forEach(el=>{
+          try{ Plotly.Plots.resize(el); }catch(e){}
+        });
+      }, 50);
+    });
+  });
+
+  // ---- KPI row ----
+  const kpiRow = document.getElementById('kpi-row');
+  DATA.tickers.forEach((t,i)=>{
+    const r = DATA.risk[t];
+    const up = r.ann_return >= 0;
+    kpiRow.innerHTML += `<div class="card kpi">
+      <div class="label">${t}</div>
+      <div class="value" style="color:${palette[i]}">${r.ann_return.toFixed(1)}%</div>
+      <div class="delta ${up?'up':'down'}">${up?'▲':'▼'} ann. return · vol ${r.ann_vol.toFixed(1)}%</div>
+    </div>`;
+  });
+
+  // ---- Performance chart ----
+  const perfTraces = DATA.tickers.map((t,i)=>({
+    x: DATA.dates, y: DATA.prices[t], type:'scatter', mode:'lines', name:t,
+    line:{color:palette[i], width:2}
+  }));
+  Plotly.newPlot('perf-chart', perfTraces, {...layoutBase}, {displayModeBar:false, responsive:true});
+
+  // ---- Correlation heatmap ----
+  const corrZ = DATA.tickers.map(r => DATA.tickers.map(c => DATA.correlation[r][c]));
+  Plotly.newPlot('corr-chart', [{
+    z: corrZ, x: DATA.tickers, y: DATA.tickers, type:'heatmap',
+    colorscale: [[0,'#0F2A3D'],[0.5,'#1B3A55'],[1,'#2DD4BF']],
+    text: corrZ.map(row=>row.map(v=>v.toFixed(2))), texttemplate:'%{text}',
+    showscale:false
+  }], {...layoutBase, margin:{t:10,l:50,r:10,b:40}}, {displayModeBar:false, responsive:true});
+
+  // ---- Risk view ----
+  function renderVarChart(metric){
+    const vals = DATA.tickers.map(t=>DATA.risk[t][metric]);
+    Plotly.newPlot('var-chart', [{
+      x: DATA.tickers, y: vals, type:'bar',
+      marker:{color: vals.map(v=> v < -3 ? neg : amber)},
+      text: vals.map(v=>v.toFixed(2)+'%'), textposition:'outside'
+    }], {...layoutBase, yaxis:{...layoutBase.yaxis, title:'Daily VaR (%)'}}, {displayModeBar:false, responsive:true});
+  }
+  renderVarChart('var95');
+  document.querySelectorAll('#var-toggle .chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('#var-toggle .chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      renderVarChart(chip.dataset.var);
+    });
+  });
+
+  Plotly.newPlot('rr-chart', [{
+    x: DATA.tickers.map(t=>DATA.risk[t].ann_vol),
+    y: DATA.tickers.map(t=>DATA.risk[t].ann_return),
+    text: DATA.tickers,
+    mode:'markers+text', textposition:'top center',
+    marker:{ size: DATA.tickers.map(t=>DATA.risk[t].beta*36), color: palette, opacity:0.85, line:{color:'#0B1220',width:1.5} }
+  }], {...layoutBase, xaxis:{...layoutBase.xaxis, title:'Ann. Volatility (%)'}, yaxis:{...layoutBase.yaxis, title:'Ann. Return (%)'}},
+  {displayModeBar:false, responsive:true});
+
+  const riskCards = document.getElementById('risk-cards');
+  DATA.tickers.forEach((t,i)=>{
+    const r = DATA.risk[t];
+    riskCards.innerHTML += `<div class="card">
+      <div class="label" style="color:${palette[i]}; font-family:'Courier New', Consolas, monospace; font-weight:600;">${t}</div>
+      <div style="font-size:12px; color:${muted}; margin-top:8px; line-height:1.9;">
+        Beta <b style="color:${text}">${r.beta.toFixed(2)}</b><br>
+        95% VaR <b style="color:${text}">${r.var95.toFixed(2)}%</b><br>
+        99% VaR <b style="color:${text}">${r.var99.toFixed(2)}%</b>
+      </div>
+    </div>`;
+  });
+
+  // ---- Optimization view ----
+  function renderFrontier(strategy){
+    const p = DATA.portfolios[strategy];
+    const markerColor = strategy==='Max_Sharpe' ? amber : (strategy==='Min_Variance' ? teal : muted);
+    Plotly.newPlot('frontier-chart', [
+      { x: DATA.frontier.vol, y: DATA.frontier.ret, type:'scatter', mode:'lines', name:'Frontier', line:{color:'#4C6FFF', width:2.5} },
+      { x: DATA.tickers.map(t=>DATA.risk[t].ann_vol), y: DATA.tickers.map(t=>DATA.risk[t].ann_return),
+        mode:'markers+text', text: DATA.tickers, textposition:'top center', name:'Holdings',
+        marker:{size:9, color: palette} },
+      { x:[p.vol], y:[p.return], mode:'markers', name:strategy.replace('_',' '),
+        marker:{size:18, symbol:'star', color: markerColor, line:{color:'#fff', width:1}} }
+    ], {...layoutBase, xaxis:{...layoutBase.xaxis, title:'Ann. Volatility (%)'}, yaxis:{...layoutBase.yaxis, title:'Ann. Return (%)'}},
+    {displayModeBar:false, responsive:true});
+  }
+
+  function renderWeights(strategy){
+    const p = DATA.portfolios[strategy];
+    const list = document.getElementById('weights-list');
+    list.innerHTML = '';
+    DATA.tickers.forEach((t,i)=>{
+      const w = p.weights[t] || 0;
+      list.innerHTML += `<div class="weight-row">
+        <div class="name">${t}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${w}%; background:${palette[i]}"></div></div>
+        <div class="pct">${w.toFixed(1)}%</div>
+      </div>`;
+    });
+    document.getElementById('strat-return').textContent = p.return.toFixed(2)+'%';
+    document.getElementById('strat-vol').textContent = p.vol.toFixed(2)+'%';
+    document.getElementById('strat-sharpe').textContent = p.sharpe.toFixed(2);
+    const titles = {Max_Sharpe:'Max Sharpe — Allocation', Min_Variance:'Min Variance — Allocation', Equal_Weight:'Equal Weight — Allocation'};
+    const captions = {
+      Max_Sharpe:'Weights that maximize risk-adjusted return (Sharpe ratio).',
+      Min_Variance:'Weights that minimize total portfolio volatility.',
+      Equal_Weight:'Naive 20% baseline allocation across all five holdings.'
+    };
+    document.getElementById('strategy-title').textContent = titles[strategy];
+    document.getElementById('strategy-caption').textContent = captions[strategy];
+  }
+
+  renderFrontier('Max_Sharpe'); renderWeights('Max_Sharpe');
+  document.querySelectorAll('#strategy-toggle .chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('#strategy-toggle .chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      renderFrontier(chip.dataset.strat);
+      renderWeights(chip.dataset.strat);
+    });
+  });
+
+  // ---- Forecast chart ----
+  const f = DATA.forecast;
+  Plotly.newPlot('forecast-chart', [
+    { x: f.hist_dates, y: f.hist_values, type:'scatter', mode:'lines', name:'Historical', line:{color:'#7C9CFF', width:2} },
+    { x: f.fc_dates, y: f.fc_values, type:'scatter', mode:'lines', name:'Forecast', line:{color:amber, width:2, dash:'dash'} },
+    { x: f.fc_dates.concat([...f.fc_dates].reverse()), y: f.ci_upper.concat([...f.ci_lower].reverse()),
+      fill:'toself', fillcolor:'rgba(245,166,35,0.12)', line:{color:'transparent'}, name:'95% CI', showlegend:true }
+  ], {...layoutBase, yaxis:{...layoutBase.yaxis, title:'Notional Portfolio Value'}}, {displayModeBar:false, responsive:true});
+
+})(DATA_INLINE);
+</script>
+</body>
+</html>
